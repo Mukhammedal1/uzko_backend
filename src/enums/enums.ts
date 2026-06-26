@@ -1,0 +1,36 @@
+export enum USER_TYPE {
+  BUSINESS_USER = 'BUSINESS_USER',
+  BUSINESS_OWNER = 'BUSINESS_OWNER',
+  SUPERADMIN = 'SUPERADMIN',
+}
+
+export enum FILE_TYPE {
+  IMAGE = 'IMAGE',
+  VIDEO = 'VIDEO',
+  DOCUMENT = 'DOCUMENT',
+  AUDIO = 'AUDIO',
+  ARCHIVE = 'ARCHIVE',
+  OTHER = 'OTHER',
+}
+
+export enum PAYMENT_METHOD {
+  CASH = 'CASH',
+  CARD = 'CARD',
+}
+
+export enum ORDER_STATUS {
+  PENDING = 'PENDING',
+  PAID = 'PAID',
+  CANCELLED = 'CANCELLED',
+  DELIVERED = 'DELIVERED',
+}
+
+export enum SALE_METHOD {
+  CASH = 'CASH',
+  CREDIT = 'CREDIT',
+}
+
+export enum CUSTOMER_DEBTS_STATUS {
+  PAID = 'PAID',
+  UNPAID = 'UNPAID',
+}
