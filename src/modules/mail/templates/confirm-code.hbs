@@ -1,0 +1,155 @@
+<html lang='uz'>
+  <head>
+    <meta charset='UTF-8' />
+    <meta name='viewport' content='width=device-width, initial-scale=1.0' />
+    <title>Hisobni tasdiqlash — Food Express</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        background-color: #f5f5f5;
+        font-family: Arial, sans-serif;
+      }
+      .wrapper {
+        padding: 32px 16px;
+      }
+      .card {
+        max-width: 480px;
+        margin: 0 auto;
+        background: #ffffff;
+        border-radius: 12px;
+        overflow: hidden;
+      }
+      .header {
+        background: #328315;
+        padding: 15px;
+        text-align: center;
+      }
+      .logo-wrap {
+        width: 64px;
+        height: 64px;
+        background: #ffffff;
+        border-radius: 50%;
+        margin: 0 auto 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+      }
+      .header h1 {
+        color: #ffffff;
+        font-size: 30px;
+        font-weight: 600;
+        margin: 0 0 4px;
+      }
+      .header p {
+        color: rgba(255, 255, 255, 0.8);
+        font-size: 13px;
+        margin: 0;
+      }
+      .body {
+        padding: 24px;
+      }
+      .desc {
+        font-size: 14px;
+        color: #555;
+        line-height: 1.6;
+        margin: 0 0 24px;
+      }
+      .otp-box {
+        background: #f0faf0;
+        border: 1.5px dashed #328315;
+        border-radius: 10px;
+        padding: 20px;
+        text-align: center;
+        margin-bottom: 24px;
+      }
+      .otp-label {
+        font-size: 11px;
+        color: #328315;
+        text-transform: uppercase;
+        letter-spacing: 1.5px;
+        margin: 0 0 8px;
+      }
+      .otp-code {
+        font-size: 45px;
+        font-weight: 700;
+        color: #328315;
+        letter-spacing: 12px;
+        font-family: 'Courier New', monospace;
+        margin: 0;
+      }
+      .otp-timer {
+        font-size: 12px;
+        color: #888;
+        margin: 8px 0 0;
+      }
+      .warning-box {
+        background: #fffbeb;
+        border-left: 3px solid #f59e0b;
+        border-radius: 6px;
+        padding: 12px 14px;
+        margin-bottom: 24px;
+      }
+      .warning-box p {
+        font-size: 13px;
+        color: #92400e;
+        margin: 0;
+        line-height: 1.5;
+      }
+      .footer {
+        background: #f9f9f9;
+        border-top: 1px solid #f0f0f0;
+        padding: 20px 24px;
+        text-align: center;
+      }
+      .footer p {
+        font-size: 12px;
+        color: #999;
+        margin: 0 0 4px;
+        line-height: 1.6;
+      }
+      .footer .links a {
+        font-size: 12px;
+        color: #aaa;
+        text-decoration: none;
+        margin: 0 6px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class='wrapper'>
+      <div class='card'>
+
+        <div class='header'>
+          <h1>Food Express</h1>
+          <p>Tez va mazali yetkazib berish</p>
+        </div>
+
+        <div class='body'>
+          <p class='desc'>
+            Emailni tasdiqlash uchun kod. Bu kod
+            <strong>3 daqiqa</strong>
+            amal qiladi.
+          </p>
+
+          <div class='otp-box'>
+            <p class='otp-label'>✦ Tasdiqlash kodi</p>
+            <p class='otp-code'>{{code}}</p>
+            <p class='otp-timer'>⏱ 3 daqiqa ichida muddati tugaydi</p>
+          </div>
+
+          <div class='warning-box'>
+            <p>
+              ⚠️ Ushbu kodni
+              <strong>hech kimga bermang</strong>
+              — Food Express xodimlari ham so'ramaydi. Agar siz bu so'rovni
+              yubormagan bo'lsangiz, xabarni e'tiborsiz qoldiring.
+            </p>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </body>
+</html>

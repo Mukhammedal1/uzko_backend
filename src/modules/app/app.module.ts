@@ -13,6 +13,8 @@ import { PagesModule } from 'modules/pages';
 import { UserPermissionsModule } from 'modules/user-permissions';
 import { AuthModule } from 'modules/auth';
 import { AgentsModule } from 'modules/agents';
+import { MailModule } from 'modules/mail';
+import { BusinessEmployeeeModule } from 'modules/business-employee';
 
 @Module({
   imports: [
@@ -33,6 +35,8 @@ import { AgentsModule } from 'modules/agents';
     UserPermissionsModule,
     AuthModule,
     AgentsModule,
+    MailModule,
+    BusinessEmployeeeModule,
   ],
 })
 export class AppModule {}

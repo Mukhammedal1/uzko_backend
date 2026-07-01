@@ -13,7 +13,7 @@ import { entities } from './entities';
         type: 'postgres',
         host: dbConfig.DB_HOST,
         port: dbConfig.DB_PORT,
-        username: dbConfig.DB_USER,
+        username: dbConfig.DB_USERNAME,
         password: dbConfig.DB_PASSWORD,
         database: dbConfig.DB_NAME,
         entities,

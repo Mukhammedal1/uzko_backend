@@ -6,26 +6,25 @@ import {
   Patch,
   Param,
   Delete,
+  UseGuards,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import {
+  RefreshTokenDto,
   RegisterBusinessDto,
   SentOtpDto,
   SignInDto,
   VerifyAgentCodeDto,
   VerifyOtpDto,
 } from './dto';
+import { CurrentUser } from '@common';
+import { UsersEntity } from '@database';
 
 @ApiTags('Auth')
 @Controller({ version: '1', path: 'auth' })
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
-
-  @Post('verify-agentcode')
-  async verifyAgentCode(@Body() verifyAgentCodeDto: VerifyAgentCodeDto) {
-    return await this.authService.verifyAgentCode(verifyAgentCodeDto);
-  }
 
   @Post('sent-otp')
   async sentOtp(@Body() sentOtpDto: SentOtpDto) {
@@ -46,4 +45,23 @@ export class AuthController {
   signIn(@Body() signInDto: SignInDto) {
     return this.authService.signin(signInDto);
   }
+
+  // @ApiBearerAuth()
+  // @UseGuards(JwtAuthGuard)
+  @Get('me')
+  getMe(@CurrentUser() currenUser: UsersEntity) {
+    return this.authService.getMe(currenUser.id);
+  }
+
+  // @ApiBearerAuth()
+  // @UseGuards(JwtAuthGuard)
+  // @Post('signout')
+  // signout(@CurrentUser() user: UsersEntity) {
+  //   return this.authService.signOut(user.id);
+  // }
+
+  // @Post('refresh')
+  // refreshToken(@Body() refreshTokenDto: RefreshTokenDto) {
+  //   return this.authService.refreshToken(refreshTokenDto);
+  // }
 }

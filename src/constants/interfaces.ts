@@ -17,7 +17,7 @@ export declare interface SmsConfig {
 export declare interface DatabaseConfig {
   DB_HOST: string;
   DB_PORT: number;
-  DB_USER: string;
+  DB_USERNAME: string;
   DB_PASSWORD: string;
   DB_NAME: string;
   NODE_ENV: string;

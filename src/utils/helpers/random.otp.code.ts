@@ -1,7 +1,7 @@
-export const RandomCodeGenerate = (): number => {
+export const RandomCodeGenerate = (): string => {
   const randomNumber = Math.ceil(Math.random() * 90000);
   if (randomNumber > 10000) {
-    return randomNumber;
+    return String(randomNumber);
   } else {
     return RandomCodeGenerate();
   }

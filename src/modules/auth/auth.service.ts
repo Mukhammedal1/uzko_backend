@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  InternalServerErrorException,
   UnauthorizedException,
 } from '@nestjs/common';
 import {
@@ -14,17 +15,20 @@ import { UsersRepository } from 'modules/users';
 import { BusinessesRepository } from 'modules/businesses';
 import { RandomCodeGenerate } from '@utils';
 import { SmsClientService } from 'infrastructure/clients/sms';
-import { OtpRepository } from 'modules/otp';
-import { JwtService } from '@nestjs/jwt';
+import { JwtService, JwtSignOptions } from '@nestjs/jwt';
 import { AgentsRepository } from 'modules/agents';
 import * as bcrypt from 'bcrypt';
 import {
+  BusinessEmployeesEntity,
   BusinessesEntity,
+  ModulesEntity,
   PagesEntity,
   UserPermissionsEntity,
   UsersEntity,
 } from '@database';
 import { USER_TYPE } from '@enums';
+import { MailService } from 'modules/mail';
+import { OtpRepository, RefreshTokenRepository } from './repositories';
 
 @Injectable()
 export class AuthService {
@@ -32,9 +36,11 @@ export class AuthService {
     private readonly businessesRepository: BusinessesRepository,
     private readonly smsClientService: SmsClientService,
     private readonly otpRepository: OtpRepository,
+    private readonly refreshTokenRepository: RefreshTokenRepository,
     private readonly jwtService: JwtService,
     private readonly usersRepository: UsersRepository,
     private readonly agentsRepository: AgentsRepository,
+    private readonly mailService: MailService,
   ) {}
 
   async verifyAgentCode(verifyAgentCodeDto: VerifyAgentCodeDto) {
@@ -44,82 +50,93 @@ export class AuthService {
     if (!agent) {
       throw new UnauthorizedException('Invalid agent code');
     }
-    return { success: true };
+    return agent;
   }
 
   async sentOtp(sentOtpDto: SentOtpDto) {
-    const { phone_number } = sentOtpDto;
-
+    const { email } = sentOtpDto;
+    const existUser = await this.usersRepository.findOne({ email });
+    if (existUser) {
+      throw new BadRequestException('user already exists');
+    }
     const code = RandomCodeGenerate();
-
-    await this.smsClientService.sendSms(
-      phone_number,
-      'This is test from Eskiz',
-    );
-
-    await this.otpRepository.hardDelete({ phone_number });
+    const hashed_code = await bcrypt.hash(code, 7);
+    await this.otpRepository.hardDelete({ email });
 
     await this.otpRepository.create({
-      phone_number,
-      code,
-      expire_date: new Date(Date.now() + 2 * 60 * 1000),
+      email,
+      code: hashed_code,
+      expires_at: new Date(Date.now() + 3 * 60 * 1000),
     });
+
+    try {
+      await this.mailService.sendVerificationCode(email, code);
+    } catch (error) {
+      await this.otpRepository.hardDelete({ email });
+      throw new InternalServerErrorException(
+        'Tasdiqlash kodini yuborishda xatolik yuz berdi',
+      );
+    }
 
     return { message: 'Code was sent succesfully', code };
   }
 
   async verifyOtp(verifyOtpDto: VerifyOtpDto) {
-    const { phone_number, confirmCode } = verifyOtpDto;
-    const existed = await this.otpRepository.findOne({
-      phone_number,
-      code: confirmCode,
-    });
-    if (!existed) {
-      throw new BadRequestException('Invalid code');
-    }
-    if (existed && existed.expire_date < new Date()) {
-      await this.otpRepository.hardDelete({ phone_number, code: confirmCode });
-      throw new UnauthorizedException('Your code is expired. please resend it');
-    }
-    await this.otpRepository.hardDelete({ phone_number, code: confirmCode });
+    const { email, code } = verifyOtpDto;
 
-    return {
-      otp_token: this.generateVerifyOtpToken(phone_number),
-    };
+    const otp = await this.otpRepository.findOne({ email });
+
+    if (!otp) {
+      throw new BadRequestException('otp not found');
+    }
+
+    if (otp.expires_at < new Date()) {
+      throw new BadRequestException('otp code expired');
+    }
+
+    if (otp.attempt >= 5) {
+      throw new BadRequestException('Try again later');
+    }
+
+    const isMatch = await bcrypt.compare(code, otp.code);
+
+    if (!isMatch) {
+      await this.otpRepository.updateOneOrFail(
+        { id: otp.id },
+        {
+          attempt: () => 'attempt + 1',
+        },
+      );
+      throw new BadRequestException('Invalid otp code');
+    }
+
+    await this.otpRepository.hardDelete({ email });
+
+    const otpToken = this.generateTokenForOtp(email);
+
+    return { message: 'Email confirmation is successfuly', otpToken };
   }
 
   async registerBusiness(registerBusinessDto: RegisterBusinessDto) {
-    const {
-      otp_token,
-      agent_code,
-      password,
-      company_name,
-      phone_number,
-      owner_name,
-    } = registerBusinessDto;
+    const { otp_token, agent_code, password, company_name, email, owner_name } =
+      registerBusinessDto;
 
     // ---------- token verify -------------------------------------
-    let payload: any;
-    try {
-      payload = this.jwtService.verify(otp_token);
-    } catch (error) {
-      throw new UnauthorizedException('Token is invalid or expired');
-    }
-    if (payload.purpose !== 'registration') {
-      throw new UnauthorizedException('Token is invalid or expired');
-    }
-    if (payload.phone_number !== phone_number) {
-      throw new UnauthorizedException('Phone number does not match');
+    const payload = this.verifyOtpToken(otp_token);
+
+    if (payload.purpose !== 'register' || payload.email !== email) {
+      throw new BadRequestException("This email and otp_token doesn't match");
     }
 
+    // ---------- verify agent_code ---------------------------------
+
+    const agent = await this.verifyAgentCode({ agent_code });
+
     // ----------- existed user -------------------------------------
-    const existUser = await this.usersRepository.findOne({ phone_number });
+    const existUser = await this.usersRepository.findOne({ email });
     if (existUser) {
       throw new BadRequestException('User already exists');
     }
-
-    // ----------- check agent code ----------------------------------
-    const agent = await this.agentsRepository.findOneOrFail({ agent_code });
 
     // ------------ hashed password ------------------------------------
     const hashedPassword = await bcrypt.hash(password, 7);
@@ -132,11 +149,16 @@ export class AuthService {
       });
 
       const user = await manager.save(UsersEntity, {
-        name: owner_name,
-        phone_number,
+        email: email,
         hashed_password: hashedPassword,
         user_type: USER_TYPE.BUSINESS_OWNER,
         business_id: business.id,
+      });
+
+      const business_employee = await manager.save(BusinessEmployeesEntity, {
+        first_name: owner_name,
+        business_id: business.id,
+        user_id: user.id,
       });
 
       const pages = await manager.find(PagesEntity);
@@ -156,9 +178,9 @@ export class AuthService {
   }
 
   async signin(signinDto: SignInDto) {
-    const { phone_number, password } = signinDto;
+    const { email, password } = signinDto;
     const user = await this.usersRepository.findOne(
-      { phone_number },
+      { email },
       { relations: { user_permissions: { permission: { module: true } } } },
     );
     if (!user) {
@@ -172,57 +194,120 @@ export class AuthService {
       throw new UnauthorizedException('Invalid phone number or password');
     }
 
-    const payload = {
-      id: user.id,
-      phone_number: user.phone_number,
-      user_type: user.user_type,
-      business_id: user.business_id,
-    };
+    const tokens = await this.generateAccessRefreshTokens(user);
 
-    const access_token = this.jwtService.sign(payload, { expiresIn: '1d' });
-    const refresh_token = this.jwtService.sign(payload, { expiresIn: '7d' });
+    const hashed_token = await bcrypt.hash(tokens.refresh_token, 7);
+    await this.refreshTokenRepository.hardDelete({ user_id: user.id });
+    await this.refreshTokenRepository.create({
+      user_id: user.id,
+      hashed_token,
+      expires_at: tokens.refresh_expires_at,
+    });
 
     return {
-      access_token,
-      refresh_token,
       user_id: user.id,
       business_id: user.business_id,
-      permissions: this.formatPermissions(user.user_permissions),
+      role: user.user_type,
+      ...this.buildPermissionsTree(user.user_permissions),
+      access_token: tokens.access_token,
+      refresh_token: tokens.refresh_token,
     };
   }
 
-  private generateVerifyOtpToken(phone_number: string) {
+  async getMe(id: number) {
+    const user = await this.usersRepository.findOneOrFail(
+      { id },
+      { relations: { admin: true, business_employee: true } },
+    );
+    const { admin, business_employee, ...rest } = user;
+    const profile = user.admin ?? user.business_employee ?? null;
+
+    return {
+      user_id: user.id,
+      business_id: user.business_id,
+      role: user.user_type,
+      [user.user_type]: profile,
+    };
+  }
+
+  private generateTokenForOtp(email: string) {
     return this.jwtService.sign(
-      { phone_number, purpose: 'registration' },
-      { expiresIn: '1m' },
+      { email, purpose: 'register' },
+      { secret: process.env.JWT_OTP_SECRET, expiresIn: '15m' },
     );
   }
 
-  private formatPermissions(userPermissions: any[]) {
-    const map = new Map<
-      number,
-      { module_id: number; module_key: string; module_name: any; pages: any[] }
-    >();
+  private verifyOtpToken(token: string) {
+    try {
+      return this.jwtService.verify(token, {
+        secret: process.env.JWT_OTP_SECRET,
+      });
+    } catch (error) {
+      throw new BadRequestException('Invalid Otp Token');
+    }
+  }
+
+  async generateAccessRefreshTokens(user: any) {
+    const payload = {
+      user_id: user.id,
+      role: user.user_type,
+      iss: 'uzko',
+    };
+
+    const [access_token, refresh_token] = await Promise.all([
+      this.jwtService.signAsync({ ...payload }, {
+        secret: process.env.JWT_ACCESS_SECRET_KEY,
+        expiresIn: Number(process.env.JWT_ACCESS_TTL),
+      } as JwtSignOptions),
+
+      this.jwtService.signAsync({ ...payload }, {
+        secret: process.env.JWT_REFRESH_SECRET_KEY,
+        expiresIn: Number(process.env.JWT_REFRESH_TTL),
+      } as JwtSignOptions),
+    ]);
+
+    const refresh_expires_at = new Date(
+      Date.now() + Number(process.env.JWT_REFRESH_TTL) * 1000,
+    );
+
+    return { access_token, refresh_token, refresh_expires_at };
+  }
+
+  private buildPermissionsTree(userPermissions: UserPermissionsEntity[]) {
+    const modules = new Map<number, { id: number; name: any; key: string }>();
+    const pages = new Map<number, { id: number; name: any; key: string }>();
 
     for (const up of userPermissions) {
-      const { id, key, name, module } = up.permission;
+      const page = up.permission;
+      const module = page?.module;
 
-      if (!map.has(module.id)) {
-        map.set(module.id, {
-          module_id: module.id,
-          module_key: module.key,
-          module_name: module.name,
-          pages: [],
+      if (module && !modules.has(module.id)) {
+        modules.set(module.id, {
+          id: module.id,
+          name: module.name,
+          key: module.key,
         });
       }
 
-      map.get(module.id)!.pages.push({
-        page_id: id,
-        page_key: key,
-        page_name: name,
-      });
+      if (page && !pages.has(page.id)) {
+        pages.set(page.id, {
+          id: page.id,
+          name: page.name,
+          key: page.key,
+        });
+      }
     }
 
-    return Array.from(map.values());
+    return {
+      modules: [...modules.values()],
+      pages: [...pages.values()],
+      user_permissions: userPermissions.map(({ id, user_id, page_id }) => ({
+        id,
+        user_id,
+        page_id,
+      })),
+    };
   }
+
+   
 }
