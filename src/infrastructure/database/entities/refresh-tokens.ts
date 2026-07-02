@@ -14,9 +14,6 @@ export class RefreshTokensEntity extends AbstractEntity {
   @Column({ type: 'timestamptz' })
   expires_at: Date;
 
-  @Column({ type: 'boolean', default: false })
-  revoked: boolean;
-
   @ManyToOne(() => UsersEntity, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'user_id' })
   user: UsersEntity;

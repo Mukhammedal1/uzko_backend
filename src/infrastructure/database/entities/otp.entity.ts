@@ -2,7 +2,7 @@ import { Column, Entity, Index } from 'typeorm';
 import { AbstractEntity } from '../abstract.entity';
 
 @Entity({ name: 'otp' })
-@Index(['expires_at'])
+@Index(['email', 'purpose'])
 @Index(['email', 'code'])
 export class OtpEntity extends AbstractEntity {
   @Column({ type: 'varchar' })
@@ -16,4 +16,7 @@ export class OtpEntity extends AbstractEntity {
 
   @Column({ type: 'timestamptz' })
   expires_at: Date;
+
+  @Column({ type: 'varchar', default: 'register' })
+  purpose: string;
 }
