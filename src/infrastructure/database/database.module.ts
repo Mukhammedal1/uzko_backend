@@ -20,7 +20,7 @@ import { entities } from './entities';
         // synchronize: process.env.NODE_ENV !== 'production',
         synchronize: true,
         autoLoadEntities: true,
-        migrationsRun: process.env.NODE_ENV !== 'production',
+        // migrationsRun: process.env.NODE_ENV !== 'production',
         // migrations: [join(__dirname, 'migrations/*.{ts,js}')],
 
         // Pool configuration
