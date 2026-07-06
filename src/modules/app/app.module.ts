@@ -15,6 +15,10 @@ import { AuthModule } from 'modules/auth';
 import { AgentsModule } from 'modules/agents';
 import { MailModule } from 'modules/mail';
 import { BusinessEmployeeeModule } from 'modules/business-employee';
+import { AdminModule } from 'modules/admin';
+import { SalesModule } from 'modules/sales';
+import { CustomerDebtsModule } from 'modules/customer-debts';
+import { FilesModule } from 'modules/files';
 
 @Module({
   imports: [
@@ -37,6 +41,10 @@ import { BusinessEmployeeeModule } from 'modules/business-employee';
     AgentsModule,
     MailModule,
     BusinessEmployeeeModule,
+    AdminModule,
+    SalesModule,
+    CustomerDebtsModule,
+    FilesModule
   ],
 })
 export class AppModule {}

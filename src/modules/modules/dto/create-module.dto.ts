@@ -13,4 +13,8 @@ export class CreateModuleDto {
   @IsString()
   key: string;
 
+  @ApiProperty({ type: Number, required: true })
+  @IsNotEmpty()
+  @IsNumber()
+  icon_file_id: number;
 }

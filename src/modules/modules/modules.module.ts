@@ -4,9 +4,10 @@ import { ModulesController } from './modules.controller';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ModulesEntity } from '@database';
 import { ModulesRepository } from './modules.repository';
+import { FilesModule } from 'modules/files';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([ModulesEntity])],
+  imports: [TypeOrmModule.forFeature([ModulesEntity]), FilesModule],
   controllers: [ModulesController],
   providers: [ModulesService, ModulesRepository],
   exports: [ModulesService],

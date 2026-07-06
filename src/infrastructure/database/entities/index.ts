@@ -21,5 +21,6 @@ export * from './suppliers.entity';
 export * from './user-permissions.entity';
 export * from './otp.entity';
 export * from './business-employees.entity';
-export * from "./admin.entity"
-export * from "./refresh-tokens"
+export * from './admin.entity';
+export * from './refresh-tokens';
+export * from './files.entity';
