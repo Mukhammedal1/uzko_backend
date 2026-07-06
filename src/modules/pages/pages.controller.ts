@@ -21,7 +21,7 @@ export class PagesController {
     return this.pagesService.create(createPageDto);
   }
 
-  @Get("dddd")
+  @Get()
   findAll() {
     return this.pagesService.findAll();
   }
