@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   app:
-    image: ghcr.io/mukhammedal1/uzko_backend:dev
+    image: ghcr.io/mukhammedal1/uzko_backend:main
     ports:
       - '3002:3002'
     env_file:
