@@ -10,6 +10,6 @@ import { FilesModule } from 'modules/files';
   imports: [TypeOrmModule.forFeature([ModulesEntity]), FilesModule],
   controllers: [ModulesController],
   providers: [ModulesService, ModulesRepository],
-  exports: [ModulesService],
+  exports: [ModulesService, ModulesRepository],
 })
 export class ModulesModule {}

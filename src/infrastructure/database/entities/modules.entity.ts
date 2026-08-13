@@ -12,8 +12,11 @@ export class ModulesEntity extends AbstractEntity {
   @Column({ type: 'varchar', unique: true })
   key: string;
 
-  @Column({ type: 'int', unique: true })
+  @Column({ type: 'int', unique: true, nullable: true })
   icon_file_id: number;
+
+  @Column({ type: 'int', nullable: true, default: 0 })
+  order: number;
 
   @OneToMany(() => PagesEntity, (page) => page.module)
   pages: PagesEntity[];

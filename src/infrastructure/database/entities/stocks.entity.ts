@@ -1,10 +1,19 @@
-import { Column, Entity, Index, JoinColumn, ManyToOne, OneToMany } from 'typeorm';
+import {
+  Column,
+  Entity,
+  Index,
+  JoinColumn,
+  ManyToOne,
+  OneToMany,
+  Unique,
+} from 'typeorm';
 import { AbstractEntity } from '../abstract.entity';
 import { BusinessesEntity } from './businesses.entity';
 import { ProductsEntity } from './products.entity';
 
 @Entity({ name: 'stocks' })
-@Index(['business_id'])
+@Unique(['business_id', 'name'])
+@Index(['id', 'business_id'])
 export class StocksEntity extends AbstractEntity {
   @Column({ type: 'varchar' })
   name: string;

@@ -3,7 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { HttpModule } from '@nestjs/axios';
 import * as https from 'https';
 import { TIMEOUT } from '@constants';
-import { DatabaseModule } from '@infrastructure';
+import { DatabaseModule, RedisModule } from '@infrastructure';
 import { BusinessesModule } from 'modules/businesses';
 import { CurrencyModule } from 'modules/currency';
 import { CustomersModule } from 'modules/customers';
@@ -19,6 +19,12 @@ import { AdminModule } from 'modules/admin';
 import { SalesModule } from 'modules/sales';
 import { CustomerDebtsModule } from 'modules/customer-debts';
 import { FilesModule } from 'modules/files';
+import { UnitsModule } from 'modules/units/units.module';
+import { StocksModule } from 'modules/stocks';
+import { SuppliersModule } from 'modules/suppliers';
+import { ShelfNumbersModule } from 'modules/shelf_numbers';
+import { PermissionsModule } from 'modules/permissions';
+import { ProductsModule } from 'modules/products';
 
 @Module({
   imports: [
@@ -44,7 +50,14 @@ import { FilesModule } from 'modules/files';
     AdminModule,
     SalesModule,
     CustomerDebtsModule,
-    FilesModule
+    FilesModule,
+    UnitsModule,
+    StocksModule,
+    SuppliersModule,
+    ShelfNumbersModule,
+    RedisModule,
+    PermissionsModule,
+    ProductsModule
   ],
 })
 export class AppModule {}

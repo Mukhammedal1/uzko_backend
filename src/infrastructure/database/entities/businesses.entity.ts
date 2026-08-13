@@ -20,6 +20,7 @@ import { PurchasesEntity } from './purchases.entity';
 import { ExpenseTypesEntity } from './expense-types.entity';
 import { CustomerDebtsEntity } from './customer-debts.entity';
 import { AgentsEntity } from './agents.entity';
+import { ShelfNumbersEntity } from './shelf_number.entity';
 
 @Entity({ name: 'businesses' })
 @Index(['is_active'])
@@ -78,4 +79,10 @@ export class BusinessesEntity extends AbstractEntity {
     (customer_debt) => customer_debt.business,
   )
   customer_debts: CustomerDebtsEntity[];
+
+  @OneToMany(
+    () => ShelfNumbersEntity,
+    (shelf_numbers) => shelf_numbers.business,
+  )
+  shelf_numbers: ShelfNumbersEntity[];
 }

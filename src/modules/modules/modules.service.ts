@@ -17,7 +17,10 @@ export class ModulesService {
   }
 
   async findAll() {
-    return await this.modulesRepository.find({ relations: { icon: true } });
+    return await this.modulesRepository.find({
+      relations: { icon: true },
+      order: { created_at: 'ASC' },
+    });
   }
 
   async findOne(id: number) {

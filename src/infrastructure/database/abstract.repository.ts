@@ -47,7 +47,10 @@ export abstract class AbstractRepository<TEntity extends AbstractEntity> {
   // FIND ONE
   async findOne(
     where: FindOptionsWhere<TEntity>,
-    options?: Pick<FindManyOptions<TEntity>, 'relations' | 'select' | 'order'>,
+    options?: Pick<
+      FindManyOptions<TEntity>,
+      'relations' | 'select' | 'order' | 'withDeleted'
+    >,
   ): Promise<TEntity | null> {
     return this.repository.findOne({ where, ...options });
   }

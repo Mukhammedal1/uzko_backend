@@ -10,6 +10,8 @@ import { MailModule } from 'modules/mail';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { OtpEntity, RefreshTokensEntity } from '@database';
 import { OtpRepository, RefreshTokenRepository } from './repositories';
+import { UserPermissionsModule } from 'modules/user-permissions';
+import { JwtStrategy } from './jwt-strategy';
 
 @Module({
   imports: [
@@ -20,8 +22,9 @@ import { OtpRepository, RefreshTokenRepository } from './repositories';
     BusinessesModule,
     AgentsModule,
     MailModule,
+    UserPermissionsModule,
   ],
   controllers: [AuthController],
-  providers: [AuthService, OtpRepository, RefreshTokenRepository],
+  providers: [AuthService, OtpRepository, RefreshTokenRepository, JwtStrategy],
 })
 export class AuthModule {}

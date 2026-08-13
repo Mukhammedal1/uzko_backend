@@ -1,4 +1,11 @@
-import { Column, Entity, Index, JoinColumn, ManyToOne, OneToMany } from 'typeorm';
+import {
+  Column,
+  Entity,
+  Index,
+  JoinColumn,
+  ManyToOne,
+  OneToMany,
+} from 'typeorm';
 import { AbstractEntity } from '../abstract.entity';
 import { BusinessesEntity } from './businesses.entity';
 import { PurchasesEntity } from './purchases.entity';
@@ -9,11 +16,11 @@ export class SuppliersEntity extends AbstractEntity {
   @Column({ type: 'varchar' })
   name: string;
 
-  @Column({ type: 'varchar' })
-  phone_number: string;
+  @Column({ type: 'varchar', nullable: true })
+  phone_number?: string;
 
   @Column({ type: 'varchar', nullable: true })
-  address: string;
+  address?: string;
 
   @Column({ type: 'int' })
   business_id: number;

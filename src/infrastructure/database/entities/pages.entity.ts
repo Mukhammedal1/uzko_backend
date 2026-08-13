@@ -23,15 +23,12 @@ export class PagesEntity extends AbstractEntity {
   @Column({ type: 'int' })
   module_id: number;
 
+  @Column({ type: 'int', nullable: true, default: 0 })
+  order: number;
+
   @ManyToOne(() => ModulesEntity, (module) => module.pages, {
     onDelete: 'CASCADE',
   })
   @JoinColumn({ name: 'module_id' })
   module: ModulesEntity;
-
-  @OneToMany(
-    () => UserPermissionsEntity,
-    (user_permission) => user_permission.permission,
-  )
-  user_permissions: UserPermissionsEntity[];
 }

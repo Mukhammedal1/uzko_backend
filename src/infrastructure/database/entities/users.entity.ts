@@ -28,7 +28,7 @@ export class UsersEntity extends AbstractEntity {
   @Column({ type: 'enum', enum: USER_TYPE })
   user_type: USER_TYPE;
 
-  @Column({ type: 'int' })
+  @Column({ type: 'int', nullable: true })
   business_id: number;
 
   @ManyToOne(() => BusinessesEntity, (business) => business.users, {

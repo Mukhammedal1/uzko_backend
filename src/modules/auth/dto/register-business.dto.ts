@@ -22,10 +22,10 @@ export class RegisterBusinessDto {
   @IsString()
   password: string;
 
-  @ApiProperty({ type: String, required: true })
-  @IsNotEmpty()
-  @IsString()
-  otp_token: string;
+  // @ApiProperty({ type: String, required: true })
+  // @IsNotEmpty()
+  // @IsString()
+  // otp_token: string;
 
   @ApiProperty({ type: String, required: true })
   @IsNotEmpty()

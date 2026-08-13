@@ -20,7 +20,7 @@ import {
   VerifyAgentCodeDto,
   VerifyOtpDto,
 } from './dto';
-import { CurrentUser } from '@common';
+import { CurrentUser, JwtAuthGuard } from '@common';
 import { UsersEntity } from '@database';
 
 @ApiTags('Auth')
@@ -28,10 +28,10 @@ import { UsersEntity } from '@database';
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
-  @Post('sent-otp')
-  async sentOtp(@Body() sentOtpDto: SentOtpDto) {
-    return await this.authService.sentOtp(sentOtpDto);
-  }
+  // @Post('sent-otp')
+  // async sentOtp(@Body() sentOtpDto: SentOtpDto) {
+  //   return await this.authService.sentOtp(sentOtpDto);
+  // }
 
   @Post('verify-otp')
   async verifyOtp(@Body() verifyOtpDto: VerifyOtpDto) {
@@ -63,11 +63,11 @@ export class AuthController {
     return this.authService.resetPassword(changePassword);
   }
 
-  // @ApiBearerAuth()
-  // @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
   @Get('me')
-  getMe(@CurrentUser() currenUser: UsersEntity) {
-    return this.authService.getMe(currenUser.id);
+  getMe(@CurrentUser() currentUser: UsersEntity) {
+    return this.authService.getMe(currentUser.id);
   }
 
   // @ApiBearerAuth()

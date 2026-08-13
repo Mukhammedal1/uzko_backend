@@ -1,7 +1,11 @@
 import * as dotenv from 'dotenv';
 dotenv.config();
 
-import { BadRequestException, ValidationPipe } from '@nestjs/common';
+import {
+  BadRequestException,
+  ValidationError,
+  ValidationPipe,
+} from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 // import { ExpressLoggerInterceptor } from '@infrastructure';
@@ -15,9 +19,10 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   app.enableCors({
-    origin: '*',
+    origin: ['http://localhost:3000'],
+    credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: '*',
+    allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'x-auth-token'],
     exposedHeaders: ['x-auth-token'],
   });
   app.enableVersioning();
@@ -27,9 +32,22 @@ async function bootstrap() {
       transform: true,
       whitelist: true,
       forbidNonWhitelisted: true,
-      exceptionFactory: (errors) => {
-        console.log('Validation errors:', JSON.stringify(errors, null, 2));
-        return new BadRequestException(errors);
+      exceptionFactory: (errors: ValidationError[]) => {
+        const formatErrors = (errs: ValidationError[]): string[] => {
+          return errs.flatMap((err) => {
+            const messages = err.constraints
+              ? Object.values(err.constraints)
+              : [];
+            const childMessages = err.children?.length
+              ? formatErrors(err.children)
+              : [];
+            return [...messages, ...childMessages];
+          });
+        };
+
+        const messages = formatErrors(errors);
+
+        return new BadRequestException(messages[0]);
       },
     }),
   );

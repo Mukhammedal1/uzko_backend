@@ -3,6 +3,7 @@ import {
   ForbiddenException,
   Injectable,
   InternalServerErrorException,
+  NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import {
@@ -18,7 +19,6 @@ import {
 import { UsersRepository } from 'modules/users';
 import { BusinessesRepository } from 'modules/businesses';
 import { formatWaitTime, RandomCodeGenerate } from '@utils';
-import { SmsClientService } from 'infrastructure/clients/sms';
 import { JwtService, JwtSignOptions } from '@nestjs/jwt';
 import { AgentsRepository } from 'modules/agents';
 import * as bcrypt from 'bcrypt';
@@ -27,24 +27,28 @@ import {
   BusinessesEntity,
   ModulesEntity,
   PagesEntity,
+  PermissionsEntity,
   UserPermissionsEntity,
   UsersEntity,
 } from '@database';
-import { USER_TYPE } from '@enums';
+import { PERMISSION_TYPE, USER_TYPE } from '@enums';
 import { MailService } from 'modules/mail';
 import { OtpRepository, RefreshTokenRepository } from './repositories';
+import { RedisService, TTL_FOR_OTP, TTL_FOR_REGISTER } from '@infrastructure';
+import { UserPermissionsRepository } from 'modules/user-permissions/user-permissions.repository';
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly businessesRepository: BusinessesRepository,
-    private readonly smsClientService: SmsClientService,
     private readonly otpRepository: OtpRepository,
     private readonly refreshTokenRepository: RefreshTokenRepository,
     private readonly jwtService: JwtService,
     private readonly usersRepository: UsersRepository,
     private readonly agentsRepository: AgentsRepository,
     private readonly mailService: MailService,
+    private readonly redisService: RedisService,
+    private readonly userPermissionRepository: UserPermissionsRepository,
   ) {}
 
   async verifyAgentCode(verifyAgentCodeDto: VerifyAgentCodeDto) {
@@ -57,163 +61,145 @@ export class AuthService {
     return agent;
   }
 
-  async sentOtp(sentOtpDto: SentOtpDto) {
-    const { email } = sentOtpDto;
-    const existUser = await this.usersRepository.findOne({ email });
-    if (existUser) {
-      throw new BadRequestException('user already exists');
-    }
-    const existedOtp = await this.otpRepository.findOne({
-      email,
-      purpose: 'register',
-    });
-    if (existedOtp) {
-      const now = Date.now();
-      const expires_at = new Date(existedOtp.expires_at).getTime();
-      if (now < expires_at) {
-        const waitSeconds = Math.ceil((expires_at - now) / 1000);
+  async sentOtp(email: string) {
+    const otp_key = `otp:register:${email}`;
+
+    const existed_otp = await this.redisService.get(otp_key);
+    if (existed_otp) {
+      const ttlSeconds = await this.redisService.getTTL(otp_key);
+      if (ttlSeconds > 0) {
         throw new BadRequestException(
-          `Please wait ${formatWaitTime(waitSeconds)} seconds before requesting a new code`,
+          `Iltimos ${formatWaitTime(ttlSeconds)} dan keyin qayta urinib ko'ring`,
         );
       }
     }
     const code = RandomCodeGenerate();
     const hashed_code = await bcrypt.hash(code, 7);
-    await this.otpRepository.hardDelete({ email, purpose: 'register' });
-
-    await this.otpRepository.create({
-      email,
-      code: hashed_code,
-      purpose: 'register',
-      expires_at: new Date(Date.now() + 3 * 60 * 1000),
-    });
 
     try {
       await this.mailService.sendVerificationCodeForRegister(email, code);
     } catch (error) {
       await this.otpRepository.hardDelete({ email });
       throw new InternalServerErrorException(
-        'Tasdiqlash kodini yuborishda xatolik yuz berdi',
+        'Tasdiqlash kodini yuborishda xatolik yuz berdi, internetga ulanishni tekshiring',
       );
     }
 
-    return { message: 'Code was sent succesfully', code };
+    await this.redisService.set(otp_key, { code: hashed_code }, TTL_FOR_OTP);
+
+    return { message: 'Code was sent succesfully' };
   }
 
   async verifyOtp(verifyOtpDto: VerifyOtpDto) {
     const { email, code } = verifyOtpDto;
+    const otp_key = `otp:register:${email}`;
 
-    const otp = await this.otpRepository.findOne({
-      email,
-      purpose: 'register',
-    });
+    const otp = await this.redisService.get<{ code: string }>(otp_key);
 
     if (!otp) {
-      throw new BadRequestException('otp not found');
-    }
-
-    if (otp.expires_at < new Date()) {
-      throw new BadRequestException('otp code expired');
-    }
-
-    if (otp.attempt >= 5) {
-      throw new BadRequestException('Try again later');
+      throw new BadRequestException('Tasdiqlash kodi yaroqsiz');
     }
 
     const isMatch = await bcrypt.compare(code, otp.code);
 
     if (!isMatch) {
-      await this.otpRepository.updateOneOrFail(
-        { id: otp.id },
-        {
-          attempt: () => 'attempt + 1',
-        },
+      throw new BadRequestException('Tasdiqlash kodi yaroqsiz');
+    }
+
+    const register_key = `register:business:${email}`;
+    const registerData = await this.redisService.get<any>(register_key);
+
+    if (!registerData) {
+      throw new BadRequestException(
+        "Ro'yxatdan o'tish ma'lumotlari topilmadi, qaytadan boshlang",
       );
-      throw new BadRequestException('Invalid otp code');
     }
 
-    await this.otpRepository.hardDelete({ email, purpose: 'register' });
-
-    const otpToken = this.generateTokenForOtp(email, 'register');
-
-    return { message: 'Email confirmation is successfuly', otpToken };
-  }
-
-  async registerBusiness(registerBusinessDto: RegisterBusinessDto) {
-    const { otp_token, agent_code, password, company_name, email, owner_name } =
-      registerBusinessDto;
-
-    // ---------- token verify -------------------------------------
-    const payload = this.verifyOtpToken(otp_token);
-
-    if (payload.purpose !== 'register' || payload.email !== email) {
-      throw new BadRequestException("This email and otp_token doesn't match");
-    }
-
-    // ---------- verify agent_code ---------------------------------
-
-    const agent = await this.verifyAgentCode({ agent_code });
-
-    // ----------- existed user -------------------------------------
-    const existUser = await this.usersRepository.findOne({ email });
-    if (existUser) {
-      throw new BadRequestException('User already exists');
-    }
-
-    // ------------ hashed password ------------------------------------
-    const hashedPassword = await bcrypt.hash(password, 7);
-
-    // ------------- user create ----------------------------------------
     const user = await this.usersRepository.withTransaction(async (manager) => {
       const business = await manager.save(BusinessesEntity, {
-        company_name,
-        agent_id: agent.id,
+        company_name: registerData.company_name,
+        agent_id: registerData.agent_id,
       });
 
       const user = await manager.save(UsersEntity, {
         email: email,
-        hashed_password: hashedPassword,
+        hashed_password: registerData.password,
         user_type: USER_TYPE.BUSINESS_OWNER,
         business_id: business.id,
       });
 
       const business_employee = await manager.save(BusinessEmployeesEntity, {
-        first_name: owner_name,
+        first_name: registerData.owner_name,
         business_id: business.id,
         user_id: user.id,
       });
 
-      const pages = await manager.find(PagesEntity);
+      const permissions = await manager.find(PermissionsEntity, {
+        where: { permission_type: PERMISSION_TYPE.BUSINESS },
+      });
+      if (!permissions) {
+        throw new NotFoundException('permissions not found');
+      }
 
       await manager.insert(
         UserPermissionsEntity,
-        pages.map((page) => ({
+        permissions.map((permission) => ({
           user_id: user.id,
-          page_id: page.id,
+          permission_id: permission.id,
         })),
       );
 
       return user;
     });
 
-    return user;
+    return { message: 'Register is successfuly' };
+  }
+
+  async registerBusiness(registerBusinessDto: RegisterBusinessDto) {
+    const { agent_code, password, company_name, email, owner_name } =
+      registerBusinessDto;
+
+    // ---------- verify agent_code ---------------------------------
+    const agent = await this.verifyAgentCode({ agent_code });
+
+    // ----------- existed user -------------------------------------
+    const existUser = await this.usersRepository.findOne(
+      { email },
+      { withDeleted: true },
+    );
+    if (existUser) {
+      throw new BadRequestException('User already exists');
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    await this.redisService.set(
+      `register:business:${email}`,
+      {
+        agent_id: agent.id,
+        password: hashedPassword,
+        company_name,
+        email,
+        owner_name,
+      },
+      TTL_FOR_REGISTER,
+    );
+
+    return await this.sentOtp(email);
   }
 
   async signin(signinDto: SignInDto) {
     const { email, password } = signinDto;
-    const user = await this.usersRepository.findOne(
-      { email },
-      { relations: { user_permissions: { permission: { module: true } } } },
-    );
+    const user = await this.usersRepository.findOne({ email });
     if (!user) {
-      throw new UnauthorizedException('Invalid phone numer or password');
+      throw new UnauthorizedException('Telefon raqam yoki parol xato');
     }
     const matchedPassword = await bcrypt.compare(
       password,
       user.hashed_password,
     );
     if (!matchedPassword) {
-      throw new UnauthorizedException('Invalid phone number or password');
+      throw new UnauthorizedException('Telefon raqam yoki parol xato');
     }
 
     const tokens = await this.generateAccessRefreshTokens(user);
@@ -230,7 +216,6 @@ export class AuthService {
       user_id: user.id,
       business_id: user.business_id,
       role: user.user_type,
-      ...this.buildPermissionsTree(user.user_permissions),
       access_token: tokens.access_token,
       refresh_token: tokens.refresh_token,
     };
@@ -243,39 +228,49 @@ export class AuthService {
     );
     const { admin, business_employee, ...rest } = user;
     const profile = user.admin ?? user.business_employee ?? null;
+    const userPermissions = await this.userPermissionRepository.find({
+      where: { user_id: id },
+      relations: { permission: { page: true, module: { icon: true } } },
+    });
 
     return {
       user_id: user.id,
       business_id: user.business_id,
       role: user.user_type,
       [user.user_type]: profile,
+      ...this.buildPermissions(userPermissions),
     };
   }
 
   async forgetPassword(forgetPasswordDto: ForgetPasswordDto) {
     const { email } = forgetPasswordDto;
+    console.log(email);
+
     const user = await this.usersRepository.findOne({ email });
     if (user) {
       const code = RandomCodeGenerate();
       const hashed_code = await bcrypt.hash(code, 7);
-      await this.otpRepository.hardDelete({ email, purpose: 'reset_password' });
-      await this.otpRepository.create({
-        email,
-        code: hashed_code,
-        purpose: 'reset_password',
-        expires_at: new Date(Date.now() + 3 * 60 * 1000),
-      });
+      const otp_key = `otp:reset_password:${email}`;
+      const otp = await this.redisService.get<any>(otp_key);
+      console.log(otp);
+
+      if (otp) {
+        const ttlSeconds = await this.redisService.getTTL(otp_key);
+        if (ttlSeconds > 0) {
+          throw new BadRequestException(
+            `Iltimos ${formatWaitTime(ttlSeconds)} dan keyin qayta urinib ko'ring`,
+          );
+        }
+      }
       try {
         await this.mailService.sendVerificationCodeChangePassword(email, code);
       } catch (error) {
-        await this.otpRepository.hardDelete({
-          email,
-          purpose: 'reset_password',
-        });
+        await this.redisService.delete(otp_key);
         throw new InternalServerErrorException(
           'Tasdiqlash kodini yuborishda xatolik yuz berdi',
         );
       }
+      await this.redisService.set(otp_key, { code: hashed_code }, TTL_FOR_OTP);
     }
     return { message: 'Code sent successfully!' };
   }
@@ -283,57 +278,27 @@ export class AuthService {
   async verifyOtpResetPassword(verifyOtpDto: VerifyOtpDto) {
     const { email, code } = verifyOtpDto;
 
-    const otp = await this.otpRepository.findOne({
-      email,
-      purpose: 'reset_password',
-    });
+    const otp_key = `otp:reset_password:${email}`;
+
+    const otp = await this.redisService.get<any>(otp_key);
 
     if (!otp) {
-      throw new BadRequestException('Otp not found');
-    }
-
-    if (otp.expires_at < new Date()) {
-      throw new BadRequestException('Otp code expired');
-    }
-
-    if (otp.attempt >= 5) {
-      throw new BadRequestException('Try again later');
+      throw new BadRequestException('Tasdiqlash kodi yaroqsiz');
     }
 
     const isMatch = await bcrypt.compare(code, otp.code);
 
     if (!isMatch) {
-      await this.otpRepository.updateOneOrFail(
-        { id: otp.id },
-        {
-          attempt: () => 'attempt + 1',
-        },
-      );
-      throw new BadRequestException('Invalid otp code');
+      throw new BadRequestException('Tasdiqlash kodi yaroqsiz');
     }
 
-    await this.otpRepository.hardDelete({ email, purpose: 'reset_password' });
-
-    const reset_otp_token = this.generateTokenForOtp(email, 'reset_password');
-
-    return { message: 'Email confirmation is successfuly', reset_otp_token };
+    return { message: 'Email confirmation is successfuly' };
   }
 
   async resetPassword(changePasswordDto: ChangePasswordDto) {
-    const { reset_otp_token, new_password } = changePasswordDto;
+    const { email, new_password } = changePasswordDto;
 
-    let payload: any;
-    try {
-      payload = this.verifyOtpToken(reset_otp_token);
-    } catch {
-      throw new BadRequestException('Invalid or expired token');
-    }
-
-    if (payload.purpose !== 'reset_password') {
-      throw new BadRequestException('Invalid token');
-    }
-
-    const user = await this.usersRepository.findOneOrFail(payload.email);
+    const user = await this.usersRepository.findOneOrFail({ email });
 
     const hashedPassword = await bcrypt.hash(new_password, 7);
     await this.usersRepository.updateOneOrFail(
@@ -404,23 +369,6 @@ export class AuthService {
     };
   }
 
-  private generateTokenForOtp(email: string, purpose: string) {
-    return this.jwtService.sign(
-      { email, purpose },
-      { secret: process.env.JWT_OTP_SECRET, expiresIn: '15m' },
-    );
-  }
-
-  private verifyOtpToken(token: string) {
-    try {
-      return this.jwtService.verify(token, {
-        secret: process.env.JWT_OTP_SECRET,
-      });
-    } catch (error) {
-      throw new BadRequestException('Invalid Otp Token');
-    }
-  }
-
   async generateAccessRefreshTokens(user: any) {
     const payload = {
       user_id: user.id,
@@ -447,19 +395,29 @@ export class AuthService {
     return { access_token, refresh_token, refresh_expires_at };
   }
 
-  private buildPermissionsTree(userPermissions: UserPermissionsEntity[]) {
-    const modules = new Map<number, { id: number; name: any; key: string }>();
-    const pages = new Map<number, { id: number; name: any; key: string }>();
+  private buildPermissions(userPermissions: UserPermissionsEntity[]) {
+    const modules = new Map<
+      number,
+      { id: number; name: any; key: string; icon: any; order: number }
+    >();
+    const pages = new Map<
+      number,
+      { id: number; name: any; key: string; module_id: number; order: number }
+    >();
+    const permissions: string[] = [];
 
     for (const up of userPermissions) {
-      const page = up.permission;
-      const module = page?.module;
+      const permission = up.permission;
+      const page = permission?.page;
+      const module = permission?.module;
 
       if (module && !modules.has(module.id)) {
         modules.set(module.id, {
           id: module.id,
           name: module.name,
           key: module.key,
+          icon: module.icon,
+          order: module.order,
         });
       }
 
@@ -468,18 +426,19 @@ export class AuthService {
           id: page.id,
           name: page.name,
           key: page.key,
+          module_id: page.module_id,
+          order: page.order,
         });
+      }
+      if (permission) {
+        permissions.push(permission.key);
       }
     }
 
     return {
-      modules: [...modules.values()],
-      pages: [...pages.values()],
-      user_permissions: userPermissions.map(({ id, user_id, page_id }) => ({
-        id,
-        user_id,
-        page_id,
-      })),
+      modules: [...modules.values()].sort((a, b) => a.order - b.order),
+      pages: [...pages.values()].sort((a, b) => a.order - b.order),
+      permissions,
     };
   }
 }

@@ -15,6 +15,6 @@ import { PagesModule } from 'modules/pages';
   ],
   controllers: [UserPermissionsController],
   providers: [UserPermissionsService, UserPermissionsRepository],
-  exports: [UserPermissionsService],
+  exports: [UserPermissionsService, UserPermissionsRepository],
 })
 export class UserPermissionsModule {}

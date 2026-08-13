@@ -1,6 +1,12 @@
 import { NameDto } from '@database';
-import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsNumber, IsObject, IsString } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  IsNotEmpty,
+  IsNumber,
+  IsObject,
+  IsOptional,
+  IsString,
+} from 'class-validator';
 
 export class CreatePageDto {
   @ApiProperty({ type: NameDto, required: true })
@@ -17,4 +23,9 @@ export class CreatePageDto {
   @IsNotEmpty()
   @IsNumber()
   module_id: number;
+
+  @ApiPropertyOptional({ type: Number, required: false })
+  @IsOptional()
+  @IsNumber()
+  order: number;
 }

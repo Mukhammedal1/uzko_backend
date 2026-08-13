@@ -24,3 +24,6 @@ export * from './business-employees.entity';
 export * from './admin.entity';
 export * from './refresh-tokens';
 export * from './files.entity';
+export * from './shelf_number.entity';
+export * from './permissions.entity';
+export * from './product-barcodes.entity';

@@ -39,7 +39,7 @@ export class UsersService {
       const user = await manager.save(UsersEntity, {
         email: email,
         hashed_password: hashedPassword,
-        user_type: USER_TYPE.BUSINESS_USER,
+        user_type: USER_TYPE.BUSINESS_OWNER,
         business_id: business_id,
       });
 
