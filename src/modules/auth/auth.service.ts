@@ -23,8 +23,10 @@ import { JwtService, JwtSignOptions } from '@nestjs/jwt';
 import { AgentsRepository } from 'modules/agents';
 import * as bcrypt from 'bcrypt';
 import {
+  BusinessCurrencyEntity,
   BusinessEmployeesEntity,
   BusinessesEntity,
+  CurrencyEntity,
   ModulesEntity,
   PagesEntity,
   PermissionsEntity,
@@ -56,7 +58,7 @@ export class AuthService {
       agent_code: verifyAgentCodeDto.agent_code,
     });
     if (!agent) {
-      throw new UnauthorizedException('Invalid agent code');
+      throw new ForbiddenException('Invalid agent code');
     }
     return agent;
   }
@@ -146,6 +148,21 @@ export class AuthService {
         permissions.map((permission) => ({
           user_id: user.id,
           permission_id: permission.id,
+        })),
+      );
+
+      const currency = await manager.find(CurrencyEntity);
+      if (!currency) {
+        throw new NotFoundException('currency not found');
+      }
+
+      await manager.insert(
+        BusinessCurrencyEntity,
+        currency.map((currency) => ({
+          business_id: business.id,
+          currency_id: currency.id,
+          rate: String(1),
+          is_main: currency.name === 'UZS' ? true : false,
         })),
       );
 

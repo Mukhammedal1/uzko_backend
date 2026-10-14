@@ -3,16 +3,13 @@ import {
   Entity,
   Index,
   JoinColumn,
-  ManyToMany,
   ManyToOne,
   OneToMany,
 } from 'typeorm';
 import { AbstractEntity } from '../abstract.entity';
-import { CurrencyEntity } from './currency.entity';
 import { UnitsEntity } from './units.entity';
 import { UsersEntity } from './users.entity';
 import { StocksEntity } from './stocks.entity';
-import { ProductsEntity } from './products.entity';
 import { SalesEntity } from './sales.entity';
 import { CustomersEntity } from './customers.entity';
 import { SuppliersEntity } from './suppliers.entity';
@@ -44,20 +41,11 @@ export class BusinessesEntity extends AbstractEntity {
   @JoinColumn({ name: 'agent_id' })
   agent: AgentsEntity;
 
-  @OneToMany(() => CurrencyEntity, (currency) => currency.business)
-  currency: CurrencyEntity[];
-
-  @OneToMany(() => UnitsEntity, (units) => units.business)
-  units: UnitsEntity[];
-
   @OneToMany(() => UsersEntity, (users) => users.business)
   users: UsersEntity[];
 
   @OneToMany(() => StocksEntity, (stocks) => stocks.business)
   stocks: StocksEntity[];
-
-  @OneToMany(() => ProductsEntity, (product) => product.business)
-  products: ProductsEntity[];
 
   @OneToMany(() => SalesEntity, (sales) => sales.business)
   sales: SalesEntity[];

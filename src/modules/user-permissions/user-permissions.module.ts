@@ -5,13 +5,13 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { UserPermissionsEntity } from '@database';
 import { UserPermissionsRepository } from './user-permissions.repository';
 import { UsersModule } from 'modules/users';
-import { PagesModule } from 'modules/pages';
+import { PermissionsModule } from 'modules/permissions';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([UserPermissionsEntity]),
     UsersModule,
-    PagesModule,
+    PermissionsModule,
   ],
   controllers: [UserPermissionsController],
   providers: [UserPermissionsService, UserPermissionsRepository],

@@ -14,3 +14,4 @@ export * from './admin';
 export * from './customer-debt-payments';
 export * from './shelf_numbers';
 export * from "./permissions"
+export * from "./expense-types"

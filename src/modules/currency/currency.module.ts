@@ -4,10 +4,9 @@ import { CurrencyController } from './currency.controller';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { CurrencyEntity } from '@database';
 import { CurrencyRepository } from './currency.repository';
-import { BusinessesModule } from 'modules/businesses';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([CurrencyEntity]), BusinessesModule],
+  imports: [TypeOrmModule.forFeature([CurrencyEntity])],
   controllers: [CurrencyController],
   providers: [CurrencyService, CurrencyRepository],
   exports: [CurrencyService, CurrencyRepository],

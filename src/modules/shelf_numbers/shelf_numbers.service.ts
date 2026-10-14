@@ -16,7 +16,10 @@ export class ShelfNumbersService {
     await this.businessRepository.findOneOrFail({
       id: business_id,
     });
-    return await this.shlefNumbersRepository.create(createShelfNumberDto);
+    return await this.shlefNumbersRepository.create({
+      ...createShelfNumberDto,
+      business_id,
+    });
   }
 
   async findAll(business_id: number) {

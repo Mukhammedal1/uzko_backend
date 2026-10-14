@@ -16,9 +16,4 @@ export class CreateSupplierDto {
   @IsOptional()
   @IsString()
   address: string;
-
-  @ApiProperty({ type: Number })
-  @IsNotEmpty()
-  @IsNumber()
-  business_id: number;
 }

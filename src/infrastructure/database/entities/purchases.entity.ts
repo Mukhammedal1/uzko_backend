@@ -25,11 +25,8 @@ export class PurchasesEntity extends AbstractEntity {
   @Column({ type: 'int' })
   total_price: number;
 
-  @Column({ type: 'int' })
-  paid_amount: number;
-
-  @Column({ type: 'int', default: 0 })
-  debt_amount: number;
+  @Column({ type: 'decimal', precision: 18, scale: 2 })
+  paid_amount: string;
 
   @Column({ type: 'enum', enum: SALE_METHOD })
   purchase_type: SALE_METHOD;

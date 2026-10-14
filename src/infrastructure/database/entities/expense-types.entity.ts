@@ -25,7 +25,9 @@ export class ExpenseTypesEntity extends AbstractEntity {
   @Column({ type: 'int', nullable: true })
   business_id: number;
 
-  @ManyToOne(() => BusinessesEntity, (business) => business.expense_types)
+  @ManyToOne(() => BusinessesEntity, (business) => business.expense_types, {
+    onDelete: 'CASCADE',
+  })
   @JoinColumn({ name: 'business_id' })
   business: BusinessesEntity;
 

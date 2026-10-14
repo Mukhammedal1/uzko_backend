@@ -25,6 +25,8 @@ import { SuppliersModule } from 'modules/suppliers';
 import { ShelfNumbersModule } from 'modules/shelf_numbers';
 import { PermissionsModule } from 'modules/permissions';
 import { ProductsModule } from 'modules/products';
+import { ExpenseTypesModule } from 'modules/expense-types';
+import { BusinessCurrencyModule } from 'modules/business-currency';
 
 @Module({
   imports: [
@@ -57,7 +59,9 @@ import { ProductsModule } from 'modules/products';
     ShelfNumbersModule,
     RedisModule,
     PermissionsModule,
-    ProductsModule
+    ProductsModule,
+    ExpenseTypesModule,
+    BusinessCurrencyModule,
   ],
 })
 export class AppModule {}

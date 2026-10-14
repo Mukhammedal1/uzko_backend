@@ -3,18 +3,19 @@ import { UserPermissionsRepository } from './user-permissions.repository';
 import { UsersRepository } from 'modules/users';
 import { CreateUserPermissionDto, UpdateUserPermissionDto } from './dto';
 import { PagesRepository } from 'modules/pages';
+import { PermissionsRepository } from 'modules/permissions';
 
 @Injectable()
 export class UserPermissionsService {
   constructor(
     private readonly userPermissionsRepository: UserPermissionsRepository,
     private readonly usersRepository: UsersRepository,
-    private readonly pagesRepository: PagesRepository,
+    private readonly permissionRepository: PermissionsRepository,
   ) {}
   async create(createUserPermissionDto: CreateUserPermissionDto) {
-    const { user_id, page_id } = createUserPermissionDto;
+    const { user_id, permission_id } = createUserPermissionDto;
     await this.usersRepository.findOneOrFail({ id: user_id });
-    await this.pagesRepository.findOneOrFail({ id: page_id });
+    await this.permissionRepository.findOneOrFail({ id: permission_id });
     return await this.userPermissionsRepository.create(createUserPermissionDto);
   }
 

@@ -17,9 +17,10 @@ import { appConfig } from '@configs';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  app.use(express.json({ limit: '50mb' }));
 
   app.enableCors({
-    origin: ['http://localhost:3000'],
+    origin: ['http://localhost:3000', 'http://localhost:3001'],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'x-auth-token'],
@@ -52,7 +53,7 @@ async function bootstrap() {
     }),
   );
   app.useGlobalFilters(new ExpressExceptionFilter());
-  app.use('/uploads', express.static(join(__dirname, '..', 'uploads')));
+  app.use('/uploads', express.static(join(process.cwd(), 'uploads')));
   // app.useGlobalInterceptors(
   //   new ExpressLoggerInterceptor({
   //     service: 'u-agro',

@@ -1,7 +1,6 @@
 import {
   Column,
   Entity,
-  Index,
   JoinColumn,
   ManyToOne,
   OneToMany,
@@ -9,11 +8,10 @@ import {
 } from 'typeorm';
 import { AbstractEntity } from '../abstract.entity';
 import { BusinessesEntity } from './businesses.entity';
-import { ProductsEntity } from './products.entity';
+import { ProductVariantsEntity } from './product-variants.entity';
 
 @Entity({ name: 'stocks' })
 @Unique(['business_id', 'name'])
-@Index(['id', 'business_id'])
 export class StocksEntity extends AbstractEntity {
   @Column({ type: 'varchar' })
   name: string;
@@ -27,6 +25,9 @@ export class StocksEntity extends AbstractEntity {
   @JoinColumn({ name: 'business_id' })
   business: BusinessesEntity;
 
-  @OneToMany(() => ProductsEntity, (product) => product.stock)
-  products: ProductsEntity[];
+  @OneToMany(
+    () => ProductVariantsEntity,
+    (product_variant) => product_variant.stock,
+  )
+  product_variants: ProductVariantsEntity[];
 }

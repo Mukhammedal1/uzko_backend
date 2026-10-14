@@ -9,26 +9,34 @@ export class SuppliersService {
     private readonly suppliersRepository: SuppliersRepository,
     private readonly businessRepository: BusinessesRepository,
   ) {}
-  async create(createSupplierDto: CreateSupplierDto) {
+  async create(createSupplierDto: CreateSupplierDto, business_id: number) {
     await this.businessRepository.findOneOrFail({
-      id: createSupplierDto.business_id,
+      id: business_id,
     });
-    return await this.suppliersRepository.create(createSupplierDto);
+    return await this.suppliersRepository.create({
+      ...createSupplierDto,
+      business_id,
+    });
   }
 
-  async findAll() {
-    return await this.suppliersRepository.find();
+  async findAll(business_id: number) {
+    return await this.suppliersRepository.find({
+      where: { business_id },
+      order: { created_at: 'DESC' },
+    });
   }
 
-  async findOne(id: number) {
-    return await this.suppliersRepository.findOneOrFail({ id });
+  async findOne(id: number, business_id: number) {
+    return await this.suppliersRepository.findOneOrFail({ id, business_id });
   }
 
-  async update(id: number, updateSupplierDto: UpdateSupplierDto) {
-    await this.findOne(id);
-
+  async update(
+    id: number,
+    updateSupplierDto: UpdateSupplierDto,
+    business_id: number,
+  ) {
     await this.businessRepository.findOneOrFail({
-      id: updateSupplierDto.business_id,
+      id: business_id,
     });
 
     return await this.suppliersRepository.updateOneOrFail(
@@ -37,7 +45,7 @@ export class SuppliersService {
     );
   }
 
-  async remove(id: number) {
-    return await this.suppliersRepository.softDeleteOrFail({ id });
+  async remove(id: number, business_id: number) {
+    return await this.suppliersRepository.softDeleteOrFail({ id, business_id });
   }
 }

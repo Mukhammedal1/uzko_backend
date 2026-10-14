@@ -11,5 +11,5 @@ export class CreateUserPermissionDto {
   @ApiProperty({ type: Number, required: true })
   @IsNotEmpty()
   @IsNumber()
-  page_id: number;
+  permission_id: number;
 }

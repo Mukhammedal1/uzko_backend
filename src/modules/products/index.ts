@@ -1,4 +1,4 @@
 export * from './dto';
 export * from './products.module';
-export * from './products.repository';
+export * from './repositories';
 export * from './products.service';

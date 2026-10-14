@@ -1,19 +1,11 @@
-import { Column, Entity, Index, JoinColumn, ManyToOne } from 'typeorm';
+import { Column, Entity } from 'typeorm';
 import { AbstractEntity } from '../abstract.entity';
-import { BusinessesEntity } from './businesses.entity';
 
 @Entity({ name: 'units' })
-@Index(['business_id'])
 export class UnitsEntity extends AbstractEntity {
   @Column({ type: 'varchar', unique: true })
   name: string;
 
-  @Column({ type: 'int' })
-  business_id: number;
-
-  @ManyToOne(() => BusinessesEntity, (business) => business.units, {
-    onDelete: 'CASCADE',
-  })
-  @JoinColumn({ name: 'business_id' })
-  business: BusinessesEntity;
+  @Column({ type: 'varchar', unique: true, nullable: true })
+  key: string;
 }

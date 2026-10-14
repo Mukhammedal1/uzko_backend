@@ -1,7 +1,6 @@
 import { Column, Entity, JoinColumn, ManyToOne } from 'typeorm';
 import { AbstractEntity } from '../abstract.entity';
 import { SalesEntity } from './sales.entity';
-import { ProductsEntity } from './products.entity';
 
 @Entity({ name: 'sale_items' })
 export class SaleItemsEntity extends AbstractEntity {
@@ -26,9 +25,4 @@ export class SaleItemsEntity extends AbstractEntity {
   @JoinColumn({ name: 'sale_id' })
   sale: SalesEntity;
 
-  @ManyToOne(() => ProductsEntity, (product) => product.sale_items, {
-    onDelete: 'RESTRICT',
-  })
-  @JoinColumn({ name: 'product_id' })
-  product: ProductsEntity;
 }

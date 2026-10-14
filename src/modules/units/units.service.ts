@@ -5,19 +5,15 @@ import { BusinessesRepository } from 'modules/businesses';
 
 @Injectable()
 export class UnitsService {
-  constructor(
-    private readonly unitsRepository: UnitsRepository,
-    private readonly businessRepository: BusinessesRepository,
-  ) {}
+  constructor(private readonly unitsRepository: UnitsRepository) {}
   async create(createUnitDto: CreateUnitDto) {
-    await this.businessRepository.findOneOrFail({
-      id: createUnitDto.business_id,
-    });
     return await this.unitsRepository.create(createUnitDto);
   }
 
   async findAll() {
-    return await this.unitsRepository.find();
+    return await this.unitsRepository.find({
+      order: { created_at: "ASC" },
+    });
   }
 
   async findOne(id: number) {
@@ -25,13 +21,7 @@ export class UnitsService {
   }
 
   async update(id: number, updateUnitDto: UpdateUnitDto) {
-    await this.businessRepository.findOneOrFail({
-      id: updateUnitDto.business_id,
-    });
-    return await this.unitsRepository.updateOneOrFail(
-      { id, business_id: updateUnitDto.business_id },
-      updateUnitDto,
-    );
+    return await this.unitsRepository.updateOneOrFail({ id }, updateUnitDto);
   }
 
   async remove(id: number) {
