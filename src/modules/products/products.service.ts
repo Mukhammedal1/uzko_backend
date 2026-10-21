@@ -6,11 +6,13 @@ import {
 } from '@nestjs/common';
 import { ProductsRepository } from './repositories/products.repository';
 import {
+  BulkDeleteDto,
+  BulkUpdateProductItemDto,
+  BulkUpdateVariantItemDto,
   CreateProductsDto,
   CreateVariantDto,
   ProductFilterDto,
-  UpdateProductDto,
-  UpdateProductVariantDto,
+  UpsertVariantItemDto,
 } from './dto';
 import {
   CurrencyEntity,
@@ -20,6 +22,7 @@ import {
   ProductVariantsEntity,
   ShelfNumbersEntity,
   StocksEntity,
+  SuppliersEntity,
   UnitsEntity,
 } from '@database';
 import { EntityManager, EntityTarget, In } from 'typeorm';
@@ -283,6 +286,7 @@ export class ProductsService {
       limit = 10,
       search,
       stock_id,
+      unit_id,
       supplier_id,
       shelf_number_id,
       available_image,
@@ -352,6 +356,11 @@ export class ProductsService {
     )`,
         { stock_id },
       );
+    }
+
+    // Birlik bo'yicha
+    if (unit_id) {
+      qb.andWhere('product.unit_id = :unit_id', { unit_id });
     }
 
     // Ta'minotchi bo'yicha
@@ -471,8 +480,23 @@ export class ProductsService {
     );
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} product`;
+  async findOne(id: number, business_id: number) {
+    return await this.productsRepository.findOneOrFail(
+      { id, business_id },
+      {
+        relations: {
+          variants: {
+            image: true,
+            purchase_price_currency: true,
+            retail_price_currency: true,
+            wholesale_price_currency: true,
+            stock: true,
+            barcodes: true,
+            shelf_number: true,
+          },
+        },
+      },
+    );
   }
 
   async createVariant(
@@ -529,111 +553,530 @@ export class ProductsService {
     });
   }
 
-  async update(
-    id: number,
-    updateProductDto: UpdateProductDto,
+  async bulkUpdateProducts(
+    items: BulkUpdateProductItemDto[],
     business_id: number,
   ) {
-    await this.unitsRepository.findOneOrFail({ id: updateProductDto.unit_id });
-    return await this.productsRepository.updateOneOrFail(
-      { id, business_id },
-      updateProductDto,
-    );
-  }
+    if (!items.length) return { updated: 0 };
 
-  async updateProductVariant(
-    id: number,
-    updateProductVariantDto: UpdateProductVariantDto,
-    business_id: number,
-  ) {
-    const { barcodes, ...fields } = updateProductVariantDto;
-
-    return this.productVariantsRepository.withTransaction(async (manager) => {
-      const variant = await manager.findOne(ProductVariantsEntity, {
-        where: { id },
-        relations: { product: true },
+    return this.productsRepository.withTransaction(async (manager) => {
+      // 1) Barcha productlar shu biznesga tegishli ekanini BITTA so'rovda tekshiramiz
+      const ids = items.map((i) => i.id);
+      const owned = await manager.count(ProductsEntity, {
+        where: { id: In(ids), business_id },
       });
-
-      if (!variant || variant.product.business_id !== business_id) {
-        throw new NotFoundException('Variant topilmadi');
+      if (owned !== new Set(ids).size) {
+        throw new NotFoundException('Mahsulot topilmadi');
       }
 
-      const currencies = new Set(
-        [
-          fields.purchase_price_currency_id,
-          fields.retail_price_currency_id,
-          fields.wholesale_price_currency_id,
-        ].filter(Boolean) as number[],
-      );
+      // 2) unit_id'larni BITTA so'rovda tekshiramiz
+      const unitIds = new Set<number>();
+      items.forEach((i) => i.unit_id && unitIds.add(i.unit_id));
+      if (unitIds.size) {
+        await this.check(manager, UnitsEntity, unitIds, {}, "O'lchov birligi");
+      }
 
-      await this.check(manager, CurrencyEntity, currencies, {}, 'Valyuta');
-
-      await this.check(
-        manager,
-        StocksEntity,
-        new Set(fields.stock_id ? [fields.stock_id] : []),
-        { business_id },
-        'Ombor',
+      // 3) Product maydonlarini (name, unit_id) BITTA UPDATE...FROM(VALUES) bilan yangilaymiz
+      const withProductFields = items.filter(
+        (i) => i.name !== undefined || i.unit_id !== undefined,
       );
-      await this.check(
-        manager,
-        ShelfNumbersEntity,
-        new Set(fields.shelf_number_id ? [fields.shelf_number_id] : []),
-        { business_id },
-        'Javon',
-      );
-      await this.check(
-        manager,
-        FilesEntity,
-        new Set(fields.file_id ? [fields.file_id] : []),
-        {},
-        'Fayl',
-      );
+      if (withProductFields.length) {
+        await this.bulkUpdateProductFields(manager, withProductFields);
+      }
 
-      // Artikul shu tovar ichida takrorlanmasin
-      if (fields.artikul && fields.artikul !== variant.artikul) {
-        const exists = await manager.existsBy(ProductVariantsEntity, {
-          product_id: variant.product_id,
-          artikul: fields.artikul,
-        });
+      // 4) variants ichida id bor — yangilanadi, id yo'q — yangi variant sifatida yaratiladi
+      const existingVariantItems: BulkUpdateVariantItemDto[] = [];
+      const expectedProductIdByVariantId = new Map<number, number>();
+      const newVariantsByProduct = new Map<number, UpsertVariantItemDto[]>();
 
-        if (exists) {
-          throw new ConflictException(`Artikul band: ${fields.artikul}`);
+      for (const item of items) {
+        for (const v of item.variants ?? []) {
+          if (v.id) {
+            existingVariantItems.push(v as BulkUpdateVariantItemDto);
+            expectedProductIdByVariantId.set(v.id, item.id);
+          } else {
+            const list = newVariantsByProduct.get(item.id) ?? [];
+            list.push(v);
+            newVariantsByProduct.set(item.id, list);
+          }
         }
       }
 
-      await manager.update(ProductVariantsEntity, id, {
-        ...fields,
-        // decimal ustunlar string bo'lib saqlanadi
-        purchase_price: fields.purchase_price?.toString(),
-        retail_price: fields.retail_price?.toString(),
-        wholesale_price:
-          fields.wholesale_price != null
-            ? String(fields.wholesale_price)
-            : undefined,
-        alert_quantity:
-          fields.alert_quantity != null
-            ? String(fields.alert_quantity)
-            : undefined,
-        box_quantity:
-          fields.box_quantity != null ? String(fields.box_quantity) : undefined,
-      });
-
-      if (barcodes) {
-        await this.syncBarcodes(manager, id, business_id, barcodes);
+      if (existingVariantItems.length) {
+        await this.applyVariantUpdates(
+          manager,
+          existingVariantItems,
+          business_id,
+          expectedProductIdByVariantId,
+        );
       }
 
-      return { success: true };
+      if (newVariantsByProduct.size) {
+        await this.bulkCreateVariants(
+          manager,
+          business_id,
+          newVariantsByProduct,
+        );
+      }
+
+      return { updated: items.length };
     });
   }
 
-  async remove(id: number, business_id: number) {
-    return await this.productsRepository.softDeleteOrFail({ id, business_id });
+  private async bulkCreateVariants(
+    manager: EntityManager,
+    business_id: number,
+    newVariantsByProduct: Map<number, UpsertVariantItemDto[]>,
+  ) {
+    const currencies = new Set<number>();
+    const files = new Set<number>();
+    const codes = new Set<string>();
+
+    for (const variants of newVariantsByProduct.values()) {
+      for (const v of variants) {
+        [
+          v.purchase_price_currency_id,
+          v.retail_price_currency_id,
+          v.wholesale_price_currency_id,
+        ].forEach((id) => id && currencies.add(id));
+        if (v.file_id) files.add(v.file_id);
+        (v.barcodes ?? []).forEach((c) => codes.add(c));
+      }
+    }
+
+    await this.check(manager, CurrencyEntity, currencies, {}, 'Valyuta');
+    await this.check(manager, FilesEntity, files, {}, 'Fayl');
+
+    if (codes.size) {
+      const busy: string[] = [];
+      for (const part of this.chunk([...codes])) {
+        const rows = await manager.find(ProductVariantBarcodesEntity, {
+          where: { business_id, barcode: In(part) },
+          select: { barcode: true },
+        });
+        busy.push(...rows.map((r) => r.barcode));
+      }
+      if (busy.length) {
+        throw new ConflictException(`Shtrix kod band: ${busy.join(', ')}`);
+      }
+    }
+
+    // Har bir product bo'yicha mavjud artikullarni olib, yangilariga noyob artikul beramiz
+    const productIds = [...newVariantsByProduct.keys()];
+    const existingArtikuls = await manager.find(ProductVariantsEntity, {
+      where: { product_id: In(productIds) },
+      select: { product_id: true, artikul: true },
+    });
+    const takenByProduct = new Map<number, Set<string>>();
+    for (const row of existingArtikuls) {
+      const set = takenByProduct.get(row.product_id) ?? new Set<string>();
+      set.add(row.artikul);
+      takenByProduct.set(row.product_id, set);
+    }
+
+    const rows: (UpsertVariantItemDto & {
+      product_id: number;
+      barcodes: string[];
+    })[] = [];
+
+    for (const [product_id, variants] of newVariantsByProduct) {
+      const taken = takenByProduct.get(product_id) ?? new Set<string>();
+      for (const v of variants) {
+        if (v.artikul && taken.has(v.artikul)) {
+          throw new ConflictException(`Artikul band: ${v.artikul}`);
+        }
+        const artikul = v.artikul || generateArtikul(taken);
+        taken.add(artikul);
+        rows.push({ ...v, product_id, artikul, barcodes: v.barcodes ?? [] });
+      }
+      takenByProduct.set(product_id, taken);
+    }
+
+    const variantIds: number[] = [];
+    for (const part of this.chunk(rows)) {
+      const res = await manager.insert(
+        ProductVariantsEntity,
+        part.map(({ barcodes, id, ...v }) => ({
+          ...v,
+          quantity: v.quantity ?? 0,
+          alert_quantity: String(v.alert_quantity ?? 0),
+          box_quantity: String(v.box_quantity ?? 1),
+          allow_below_cost_sale: v.allow_below_cost_sale ?? false,
+          purchase_price:
+            v.purchase_price != null ? String(v.purchase_price) : null,
+          retail_price: String(v.retail_price),
+          wholesale_price:
+            v.wholesale_price != null ? String(v.wholesale_price) : null,
+        })),
+      );
+      variantIds.push(...res.identifiers.map((r) => r.id as number));
+    }
+
+    const barcodeRows = rows.flatMap((v, i) =>
+      v.barcodes.map((barcode) => ({
+        barcode,
+        business_id,
+        product_variant_id: variantIds[i],
+      })),
+    );
+    for (const part of this.chunk(barcodeRows)) {
+      await manager.insert(ProductVariantBarcodesEntity, part);
+    }
   }
 
-  async productVariantDelete(id: number, business_id: number) {
-    return await this.productVariantsRepository.softDeleteOrFail({
-      id,
+  private async bulkUpdateProductFields(
+    manager: EntityManager,
+    items: BulkUpdateProductItemDto[],
+  ) {
+    for (const part of this.chunk(items)) {
+      const rows = part.map((i) => [i.id, i.name ?? null, i.unit_id ?? null]);
+      const values = rows
+        .map(
+          (_, idx) =>
+            `($${idx * 3 + 1}::int, $${idx * 3 + 2}::varchar, $${idx * 3 + 3}::int)`,
+        )
+        .join(', ');
+      const params = rows.flat();
+
+      await manager.query(
+        `
+      UPDATE products AS p
+      SET
+        name = COALESCE(c.name, p.name),
+        unit_id = COALESCE(c.unit_id, p.unit_id)
+      FROM (VALUES ${values}) AS c(id, name, unit_id)
+      WHERE p.id = c.id
+      `,
+        params,
+      );
+    }
+  }
+
+  async bulkUpdateVariants(
+    items: BulkUpdateVariantItemDto[],
+    business_id: number,
+  ) {
+    if (!items.length) return { updated: 0 };
+
+    return this.productVariantsRepository.withTransaction(async (manager) => {
+      await this.applyVariantUpdates(manager, items, business_id);
+      return { updated: items.length };
+    });
+  }
+
+  // product_id berilsa — variantlar shu productga tegishli ekani ham tekshiriladi
+  // (combined update'da boshqa productning variantini "tasodifan" o'zgartirmaslik uchun)
+  private async applyVariantUpdates(
+    manager: EntityManager,
+    items: BulkUpdateVariantItemDto[],
+    business_id: number,
+    expectedProductIdByVariantId?: Map<number, number>,
+  ) {
+    // 1) Barcha variantlar shu biznesga (va kerak bo'lsa aynan shu productga) tegishli ekanini tekshiramiz
+    const ids = items.map((i) => i.id);
+    const variants = await manager.find(ProductVariantsEntity, {
+      where: { id: In(ids) },
+      relations: { product: true },
+    });
+
+    const byId = new Map(variants.map((v) => [v.id, v]));
+    for (const id of ids) {
+      const v = byId.get(id);
+      const expectedProductId = expectedProductIdByVariantId?.get(id);
+      if (
+        !v ||
+        v.product.business_id !== business_id ||
+        (expectedProductId != null && v.product_id !== expectedProductId)
+      ) {
+        throw new NotFoundException(`Variant topilmadi: ${id}`);
+      }
+    }
+
+    // 2) Bog'liq ID'larni yig'ib, BITTA so'rovda tekshiramiz
+    const currencies = new Set<number>();
+    const stocks = new Set<number>();
+    const shelves = new Set<number>();
+    const files = new Set<number>();
+    const suppliers = new Set<number>();
+
+    for (const item of items) {
+      [
+        item.purchase_price_currency_id,
+        item.retail_price_currency_id,
+        item.wholesale_price_currency_id,
+      ].forEach((id) => id && currencies.add(id));
+      if (item.stock_id) stocks.add(item.stock_id);
+      if (item.shelf_number_id) shelves.add(item.shelf_number_id);
+      if (item.file_id) files.add(item.file_id);
+      if (item.supplier_id) suppliers.add(item.supplier_id);
+    }
+
+    await this.check(manager, CurrencyEntity, currencies, {}, 'Valyuta');
+    await this.check(manager, StocksEntity, stocks, { business_id }, 'Ombor');
+    await this.check(
+      manager,
+      ShelfNumbersEntity,
+      shelves,
+      { business_id },
+      'Javon',
+    );
+    await this.check(manager, FilesEntity, files, {}, 'Fayl');
+    await this.check(
+      manager,
+      SuppliersEntity,
+      suppliers,
+      { business_id },
+      "Ta'minotchi",
+    );
+
+    // 3) Artikul takrorini product_id bo'yicha guruhlab, BITTA so'rovda tekshiramiz
+    const withArtikul = items.filter((i) => i.artikul);
+    if (withArtikul.length) {
+      const productIds = [
+        ...new Set(withArtikul.map((i) => byId.get(i.id)!.product_id)),
+      ];
+      const existing = await manager.find(ProductVariantsEntity, {
+        where: { product_id: In(productIds) },
+        select: { id: true, product_id: true, artikul: true },
+      });
+
+      for (const item of withArtikul) {
+        const v = byId.get(item.id)!;
+        const clash = existing.find(
+          (e) =>
+            e.product_id === v.product_id &&
+            e.artikul === item.artikul &&
+            e.id !== item.id,
+        );
+        if (clash) throw new ConflictException(`Artikul band: ${item.artikul}`);
+      }
+    }
+
+    // 4) Asosiy maydonlarni BITTA UPDATE...FROM(VALUES) bilan yangilash
+    await this.bulkUpdateVariantFields(manager, items);
+
+    // 5) Shtrix kodlarni batch tarzda sinxronlash
+    const withBarcodes = items.filter((i) => i.barcodes);
+    if (withBarcodes.length) {
+      await this.bulkSyncBarcodes(manager, business_id, withBarcodes);
+    }
+  }
+
+  // Faqat kelgan maydonlar yangilanadi (COALESCE), qolganlari o'z holida qoladi
+  private async bulkUpdateVariantFields(
+    manager: EntityManager,
+    items: BulkUpdateVariantItemDto[],
+  ) {
+    const cols = [
+      'name',
+      'artikul',
+      'quantity',
+      'alert_quantity',
+      'box_quantity',
+      'allow_below_cost_sale',
+      'purchase_price',
+      'purchase_price_currency_id',
+      'retail_price',
+      'retail_price_currency_id',
+      'retail_price_percentage',
+      'wholesale_price',
+      'wholesale_price_currency_id',
+      'wholesale_price_percentage',
+      'stock_id',
+      'shelf_number_id',
+      'file_id',
+      'supplier_id',
+    ];
+    const colTypes = [
+      'varchar',
+      'varchar',
+      'int',
+      'decimal',
+      'decimal',
+      'boolean',
+      'decimal',
+      'int',
+      'decimal',
+      'int',
+      'decimal',
+      'decimal',
+      'int',
+      'decimal',
+      'int',
+      'int',
+      'int',
+      'int',
+    ];
+
+    const rows = items.map((i) => [
+      i.id,
+      i.name ?? null,
+      i.artikul ?? null,
+      i.quantity ?? null,
+      i.alert_quantity != null ? String(i.alert_quantity) : null,
+      i.box_quantity != null ? String(i.box_quantity) : null,
+      i.allow_below_cost_sale ?? null,
+      i.purchase_price != null ? String(i.purchase_price) : null,
+      i.purchase_price_currency_id ?? null,
+      i.retail_price != null ? String(i.retail_price) : null,
+      i.retail_price_currency_id ?? null,
+      i.retail_price_percentage != null
+        ? String(i.retail_price_percentage)
+        : null,
+      i.wholesale_price != null ? String(i.wholesale_price) : null,
+      i.wholesale_price_currency_id ?? null,
+      i.wholesale_price_percentage != null
+        ? String(i.wholesale_price_percentage)
+        : null,
+      i.stock_id ?? null,
+      i.shelf_number_id ?? null,
+      i.file_id ?? null,
+      i.supplier_id ?? null,
+    ]);
+
+    // Postgres parametr limiti tufayli chunk qilamiz (500 qator × 19 ustun = 9500 param)
+    for (const part of this.chunk(rows, 500)) {
+      const nParams = cols.length + 1;
+      const valuesSql = part
+        .map(
+          (_, r) =>
+            `($${r * nParams + 1}::int, ${colTypes
+              .map((t, c) => `$${r * nParams + c + 2}::${t}`)
+              .join(', ')})`,
+        )
+        .join(', ');
+      const params = part.flat();
+
+      const setClauses = cols
+        .map((c) => `${c} = COALESCE(c.${c}, v.${c})`)
+        .join(',\n          ');
+
+      await manager.query(
+        `
+        UPDATE product_variants AS v
+        SET ${setClauses}
+        FROM (VALUES ${valuesSql}) AS c(id, ${cols.join(', ')})
+        WHERE v.id = c.id
+        `,
+        params,
+      );
+    }
+  }
+
+  private async bulkSyncBarcodes(
+    manager: EntityManager,
+    business_id: number,
+    items: { id: number; barcodes?: string[] }[],
+  ) {
+    const variantIds = items.map((i) => i.id);
+
+    // Barcha joriy kodlarni BITTA so'rovda olamiz
+    const current = await manager.find(ProductVariantBarcodesEntity, {
+      where: { product_variant_id: In(variantIds) },
+      select: { id: true, barcode: true, product_variant_id: true },
+    });
+
+    const byVariant = new Map<number, typeof current>();
+    for (const row of current) {
+      const list = byVariant.get(row.product_variant_id) ?? [];
+      list.push(row);
+      byVariant.set(row.product_variant_id, list);
+    }
+
+    const toInsert: {
+      barcode: string;
+      business_id: number;
+      product_variant_id: number;
+    }[] = [];
+    const toRemoveIds: number[] = [];
+    const newCodes = new Set<string>();
+
+    for (const item of items) {
+      const codes = item.barcodes ?? [];
+      const currentRows = byVariant.get(item.id) ?? [];
+      const currentCodes = currentRows.map((c) => c.barcode);
+
+      for (const code of codes) {
+        if (!currentCodes.includes(code)) {
+          toInsert.push({
+            barcode: code,
+            business_id,
+            product_variant_id: item.id,
+          });
+          newCodes.add(code);
+        }
+      }
+      for (const row of currentRows) {
+        if (!codes.includes(row.barcode)) toRemoveIds.push(row.id);
+      }
+    }
+
+    if (newCodes.size) {
+      const busy: string[] = [];
+      for (const part of this.chunk([...newCodes])) {
+        const rows = await manager.find(ProductVariantBarcodesEntity, {
+          where: { business_id, barcode: In(part) },
+          select: { barcode: true },
+        });
+        busy.push(...rows.map((r) => r.barcode));
+      }
+      if (busy.length)
+        throw new ConflictException(`Shtrix kod band: ${busy.join(', ')}`);
+    }
+
+    for (const part of this.chunk(toInsert)) {
+      await manager.insert(ProductVariantBarcodesEntity, part);
+    }
+    if (toRemoveIds.length) {
+      await manager.softDelete(ProductVariantBarcodesEntity, toRemoveIds);
+    }
+  }
+
+  async bulkRemove(dto: BulkDeleteDto, business_id: number) {
+    const product_ids = dto.product_ids ?? [];
+    const variant_ids = dto.variant_ids ?? [];
+
+    if (!product_ids.length && !variant_ids.length) {
+      return { products: 0, variants: 0 };
+    }
+
+    return this.productsRepository.withTransaction(async (manager) => {
+      let deletedProducts = 0;
+      let deletedVariants = 0;
+
+      // Productlar — business_id bilan birga BITTA UPDATE'da (TypeORM bu ikkisini
+      // bitta WHERE'ga birlashtiradi, chetga tegishli bo'lsa shunchaki o'chmaydi)
+      if (product_ids.length) {
+        for (const part of this.chunk(product_ids)) {
+          const res = await manager.softDelete(ProductsEntity, {
+            id: In(part),
+            business_id,
+          });
+          deletedProducts += res.affected ?? 0;
+        }
+      }
+
+      // Variantlar — product orqali business_id tekshiriladi (join), bitta raw UPDATE
+      if (variant_ids.length) {
+        for (const part of this.chunk(variant_ids)) {
+          const rows = await manager.query(
+            `
+            UPDATE product_variants AS v
+            SET deleted_at = now()
+            FROM products AS p
+            WHERE v.product_id = p.id
+              AND p.business_id = $1
+              AND v.id = ANY($2::int[])
+              AND v.deleted_at IS NULL
+            RETURNING v.id
+            `,
+            [business_id, part],
+          );
+          deletedVariants += rows.length;
+        }
+      }
+
+      return { products: deletedProducts, variants: deletedVariants };
     });
   }
 }

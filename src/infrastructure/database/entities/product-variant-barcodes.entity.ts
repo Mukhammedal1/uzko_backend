@@ -14,7 +14,7 @@ export class ProductVariantBarcodesEntity extends AbstractEntity {
   @Column({ type: 'int' })
   business_id: number;
 
-  @Column({ type: 'varchar' })
+  @Column({ type: 'varchar', nullable: true })
   barcode: string;
 
   @ManyToOne(() => ProductVariantsEntity, { onDelete: 'CASCADE' })

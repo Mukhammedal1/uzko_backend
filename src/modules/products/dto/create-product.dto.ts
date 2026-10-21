@@ -49,7 +49,8 @@ export class CreateProductVariantDto {
   @IsBoolean()
   allow_below_cost_sale?: boolean;
 
-  @ApiProperty({ type: Number })
+  @ApiPropertyOptional({ type: Number })
+  @IsOptional()
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   purchase_price: number;

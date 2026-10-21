@@ -31,7 +31,7 @@ export class ProductVariantsEntity extends AbstractEntity {
   @Column({ type: 'boolean', default: false })
   allow_below_cost_sale: boolean;
 
-  @Column({ type: 'decimal', precision: 18, scale: 2 })
+  @Column({ type: 'decimal', precision: 18, scale: 2, nullable: true })
   purchase_price: string;
 
   @Column({ type: 'int' })
@@ -112,7 +112,7 @@ export class ProductVariantsEntity extends AbstractEntity {
   wholesale_price_currency: CurrencyEntity;
 
   @ManyToOne(() => StocksEntity, (stock) => stock.product_variants, {
-    onDelete: "SET NULL",
+    onDelete: 'SET NULL',
   })
   @JoinColumn({ name: 'stock_id' })
   stock: StocksEntity;
